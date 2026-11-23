@@ -24,10 +24,23 @@ enum YouTubePlaybackProblem: Equatable {
     var message: String {
         switch self {
         case .needsNetwork:
-            "Playback needs a network connection. This list is on your phone, but the YouTube video is not downloaded or saved here."
+            "This video is streamed from YouTube, so it needs a network connection. Ember does not keep a copy on the phone."
         case .unavailable:
-            "The YouTube player refused this video. Nothing was saved on this phone."
+            "The YouTube player refused this video."
         }
+    }
+}
+
+enum YouTubeEmbed {
+    static func url(for youtubeID: String) -> URL? {
+        guard YouTubeVideoID.isValid(youtubeID) else { return nil }
+        var components = URLComponents(string: "https://www.youtube.com/embed/\(youtubeID)")
+        components?.queryItems = [
+            URLQueryItem(name: "playsinline", value: "1"),
+            URLQueryItem(name: "enablejsapi", value: "1"),
+            URLQueryItem(name: "rel", value: "0")
+        ]
+        return components?.url
     }
 }
 
@@ -81,7 +94,7 @@ enum YouTubeIFrameHTML {
     }
 }
 
-/// Official YouTube IFrame Player API inside WKWebView.
+/// Official YouTube embed inside WKWebView.
 /// The web view uses a non-persistent data store, so Ember does not keep YouTube media on disk.
 struct YouTubeIFramePlayer: UIViewRepresentable {
     var videoID: String
@@ -101,6 +114,18 @@ struct YouTubeIFramePlayer: UIViewRepresentable {
         configuration.mediaTypesRequiringUserActionForPlayback = []
         let controller = WKUserContentController()
         controller.add(context.coordinator, name: "ember")
+        let pauseScript = WKUserScript(
+            source: """
+            function emberPause() {
+              var videos = document.querySelectorAll('video');
+              for (var i = 0; i < videos.length; i++) { videos[i].pause(); }
+              if (window.player && player.pauseVideo) { player.pauseVideo(); }
+            }
+            """,
+            injectionTime: .atDocumentStart,
+            forMainFrameOnly: false
+        )
+        controller.addUserScript(pauseScript)
         configuration.userContentController = controller
 
         let webView = WKWebView(frame: .zero, configuration: configuration)
@@ -112,8 +137,8 @@ struct YouTubeIFramePlayer: UIViewRepresentable {
         webView.scrollView.backgroundColor = .black
         context.coordinator.webView = webView
         playback.webView = webView
-        if let html = YouTubeIFrameHTML.page(for: videoID) {
-            webView.loadHTMLString(html, baseURL: URL(string: "https://www.youtube.com"))
+        if let url = YouTubeEmbed.url(for: videoID) {
+            webView.load(URLRequest(url: url))
         } else {
             onPlaybackFailed(.unavailable)
         }
@@ -172,6 +197,12 @@ struct YouTubeIFramePlayer: UIViewRepresentable {
             }
         }
 
+        nonisolated func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+            Task { @MainActor in
+                self.onReady()
+            }
+        }
+
         nonisolated func webView(
             _ webView: WKWebView,
             didFailProvisionalNavigation navigation: WKNavigation!,
@@ -188,12 +219,6 @@ struct YouTubeIFramePlayer: UIViewRepresentable {
             report(error)
         }
 
-        nonisolated func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-            Task { @MainActor in
-                self.onReady()
-            }
-        }
-
         nonisolated func webView(
             _ webView: WKWebView,
             decidePolicyFor navigationAction: WKNavigationAction
@@ -201,23 +226,37 @@ struct YouTubeIFramePlayer: UIViewRepresentable {
             if navigationAction.navigationType == .linkActivated {
                 return .cancel
             }
-            guard let url = navigationAction.request.url else { return .allow }
-            switch url.scheme?.lowercased() {
-            case "about", "https", "http":
-                return .allow
-            default:
-                return .cancel
-            }
+            return Self.allows(navigationAction.request.url) ? .allow : .cancel
         }
 
         nonisolated private func report(_ error: Error) {
             let nsError = error as NSError
             if nsError.domain == NSURLErrorDomain && nsError.code == NSURLErrorCancelled { return }
+            if nsError.domain == "WebKitErrorDomain" && (nsError.code == 102 || nsError.code == 204) { return }
             Task { @MainActor in
                 self.onPlaybackFailed(.needsNetwork)
             }
         }
 
+        nonisolated private static func allows(_ url: URL?) -> Bool {
+            guard let url else { return false }
+            if url.scheme == "about" { return true }
+            guard url.scheme == "https" || url.scheme == "http" else { return false }
+            guard let host = url.host?.lowercased() else { return false }
+            let suffixes = [
+                "youtube.com",
+                "youtube-nocookie.com",
+                "youtu.be",
+                "googlevideo.com",
+                "ytimg.com",
+                "ggpht.com",
+                "gstatic.com",
+                "google.com",
+                "googleapis.com",
+                "googleusercontent.com"
+            ]
+            return suffixes.contains { host == $0 || host.hasSuffix(".\($0)") }
+        }
     }
 }
 
@@ -239,17 +278,13 @@ struct YouTubePlayerScreen: View {
                     .font(.title2.bold())
                     .foregroundStyle(EmberColor.ink)
                 Text(video.sourceCredit)
-                    .font(.title3)
-                    .foregroundStyle(EmberColor.ink)
-                Text("\(clock(video.durationSeconds)) · \(video.category.rowNote)")
-                    .font(.title3)
+                    .font(.headline)
                     .foregroundStyle(.secondary)
-                Text(video.category.detail)
-                    .font(.body)
-                    .foregroundStyle(EmberColor.ink)
-                    .fixedSize(horizontal: false, vertical: true)
-                Text("Played in the YouTube player. Ember does not download or store the video.")
-                    .font(.body)
+                Text("\(clock(video.durationSeconds)) · \(video.category.title)")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                Text("Played in the YouTube player. Ember does not download or store the video, and it does not play offline.")
+                    .font(.footnote)
                     .foregroundStyle(.secondary)
             }
             .padding(24)
@@ -295,18 +330,18 @@ struct YouTubePlayerScreen: View {
         let shown = problem ?? .needsNetwork
         return VStack(alignment: .leading, spacing: 8) {
             Text(shown.title)
-                .font(.title3.bold())
+                .font(.headline)
                 .foregroundStyle(EmberColor.ink)
             Text(shown.message)
-                .font(.body)
-                .foregroundStyle(EmberColor.ink)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             Button("Try again") {
                 ready = false
                 problem = nil
                 attempt += 1
             }
-            .font(.body.weight(.semibold))
+            .font(.subheadline.weight(.semibold))
             .foregroundStyle(EmberColor.accent)
         }
         .padding(16)
