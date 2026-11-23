@@ -231,7 +231,7 @@ struct YouTubeIFramePlayer: UIViewRepresentable {
             if navigationAction.navigationType == .linkActivated {
                 return .cancel
             }
-            return allows(navigationAction.request.url) ? .allow : .cancel
+            return Self.allows(navigationAction.request.url) ? .allow : .cancel
         }
 
         nonisolated private func report(_ error: Error) {
