@@ -1,4 +1,3 @@
-import Network
 import SwiftUI
 import WebKit
 
@@ -8,41 +7,6 @@ final class YouTubePlayback {
 
     func pause() {
         webView?.evaluateJavaScript("emberPause();", completionHandler: nil)
-    }
-}
-
-/// Cached path status. The monitor stays off the main actor so a rest screen can ask
-/// "is there a network?" without downloading any video.
-nonisolated final class NetworkWatch: @unchecked Sendable {
-    static let shared = NetworkWatch()
-    private let monitor = NWPathMonitor()
-    private let lock = NSLock()
-    private var online = true
-
-    var isOnline: Bool {
-        lock.lock()
-        defer { lock.unlock() }
-        return online
-    }
-
-    private init() {
-        monitor.pathUpdateHandler = { [weak self] path in
-            self?.store(path.status == .satisfied)
-        }
-        monitor.start(queue: DispatchQueue(label: "ember.network"))
-        store(monitor.currentPath.status == .satisfied)
-    }
-
-    private func store(_ value: Bool) {
-        lock.lock()
-        online = value
-        lock.unlock()
-    }
-}
-
-enum NetworkStatus {
-    static func isConnected() -> Bool {
-        NetworkWatch.shared.isOnline
     }
 }
 
@@ -224,6 +188,12 @@ struct YouTubeIFramePlayer: UIViewRepresentable {
             report(error)
         }
 
+        nonisolated func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+            Task { @MainActor in
+                self.onReady()
+            }
+        }
+
         nonisolated func webView(
             _ webView: WKWebView,
             decidePolicyFor navigationAction: WKNavigationAction
@@ -231,7 +201,13 @@ struct YouTubeIFramePlayer: UIViewRepresentable {
             if navigationAction.navigationType == .linkActivated {
                 return .cancel
             }
-            return Self.allows(navigationAction.request.url) ? .allow : .cancel
+            guard let url = navigationAction.request.url else { return .allow }
+            switch url.scheme?.lowercased() {
+            case "about", "https", "http":
+                return .allow
+            default:
+                return .cancel
+            }
         }
 
         nonisolated private func report(_ error: Error) {
@@ -242,31 +218,12 @@ struct YouTubeIFramePlayer: UIViewRepresentable {
             }
         }
 
-        nonisolated private static func allows(_ url: URL?) -> Bool {
-            guard let url else { return false }
-            if url.scheme == "about" { return true }
-            guard let host = url.host?.lowercased() else { return false }
-            let suffixes = [
-                "youtube.com",
-                "youtube-nocookie.com",
-                "youtu.be",
-                "googlevideo.com",
-                "ytimg.com",
-                "ggpht.com",
-                "gstatic.com",
-                "google.com",
-                "googleapis.com",
-                "googleusercontent.com"
-            ]
-            return suffixes.contains { host == $0 || host.hasSuffix(".\($0)") }
-        }
     }
 }
 
 struct YouTubePlayerScreen: View {
     let video: CatalogVideo
     @Environment(VideoLounge.self) private var lounge
-    @State private var online = NetworkStatus.isConnected()
     @State private var ready = false
     @State private var problem: YouTubePlaybackProblem?
     @State private var attempt = 0
@@ -282,13 +239,17 @@ struct YouTubePlayerScreen: View {
                     .font(.title2.bold())
                     .foregroundStyle(EmberColor.ink)
                 Text(video.sourceCredit)
-                    .font(.headline)
+                    .font(.title3)
+                    .foregroundStyle(EmberColor.ink)
+                Text("\(clock(video.durationSeconds)) · \(video.category.rowNote)")
+                    .font(.title3)
                     .foregroundStyle(.secondary)
-                Text("\(clock(video.durationSeconds)) · \(video.category.title)")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                Text("Played in the YouTube player. Ember does not download or store the video, and it does not play offline.")
-                    .font(.footnote)
+                Text(video.category.detail)
+                    .font(.body)
+                    .foregroundStyle(EmberColor.ink)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text("Played in the YouTube player. Ember does not download or store the video.")
+                    .font(.body)
                     .foregroundStyle(.secondary)
             }
             .padding(24)
@@ -296,24 +257,6 @@ struct YouTubePlayerScreen: View {
         .background(EmberColor.paper)
         .navigationTitle("Video")
         .navigationBarTitleDisplayMode(.inline)
-        .task(id: attempt) {
-            guard problem == nil, online else { return }
-            try? await Task.sleep(for: .seconds(20))
-            if !ready, problem == nil {
-                problem = .needsNetwork
-            }
-        }
-        .task {
-            while !Task.isCancelled {
-                let connected = NetworkStatus.isConnected()
-                if connected != online { online = connected }
-                if !connected, problem == nil {
-                    lounge.playback.pause()
-                    problem = .needsNetwork
-                }
-                try? await Task.sleep(for: .seconds(1))
-            }
-        }
         .onChange(of: lounge.pauseRequests) { _, _ in
             lounge.playback.pause()
         }
@@ -321,7 +264,7 @@ struct YouTubePlayerScreen: View {
 
     @ViewBuilder
     private var stage: some View {
-        if online && problem == nil {
+        if problem == nil {
             ZStack {
                 YouTubeIFramePlayer(
                     videoID: video.youtubeID,
@@ -352,23 +295,18 @@ struct YouTubePlayerScreen: View {
         let shown = problem ?? .needsNetwork
         return VStack(alignment: .leading, spacing: 8) {
             Text(shown.title)
-                .font(.headline)
+                .font(.title3.bold())
                 .foregroundStyle(EmberColor.ink)
             Text(shown.message)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .font(.body)
+                .foregroundStyle(EmberColor.ink)
                 .fixedSize(horizontal: false, vertical: true)
             Button("Try again") {
-                online = NetworkStatus.isConnected()
-                if online {
-                    ready = false
-                    problem = nil
-                    attempt += 1
-                } else {
-                    problem = .needsNetwork
-                }
+                ready = false
+                problem = nil
+                attempt += 1
             }
-            .font(.subheadline.weight(.semibold))
+            .font(.body.weight(.semibold))
             .foregroundStyle(EmberColor.accent)
         }
         .padding(16)

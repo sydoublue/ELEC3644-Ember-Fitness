@@ -14,9 +14,16 @@ enum VideoCategory: String, Codable, CaseIterable, Hashable {
     var detail: String {
         switch self {
         case .followAlong:
-            "Technique lessons, about 10–30 minutes. Pick one yourself."
+            "Full technique lessons, usually 10–30 minutes, including bench-press cues. Watch one when you want to follow the lift. Ember does not choose the next video."
         case .lightShort:
-            "Light sports clips for a rest of about 3 minutes."
+            "Light sports clips for the rest between gym sets, about 3 minutes. Your rest timer keeps running, and playback pauses when it is time for the next set."
+        }
+    }
+
+    var rowNote: String {
+        switch self {
+        case .followAlong: "Technique lesson"
+        case .lightShort: "Rest between sets"
         }
     }
 }

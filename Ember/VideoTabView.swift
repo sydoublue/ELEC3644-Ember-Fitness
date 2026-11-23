@@ -61,13 +61,15 @@ struct VideoTabView: View {
     private func catalogSection(_ category: VideoCategory) -> some View {
         let rows = library.items(in: category)
         VStack(alignment: .leading, spacing: 10) {
-            Text(category.title.uppercased())
-                .font(.caption.weight(.semibold))
-                .tracking(1.2)
-                .foregroundStyle(EmberColor.accent)
-            Text(category.detail)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 6) {
+                Text(category.title)
+                    .font(.title2.bold())
+                    .foregroundStyle(EmberColor.ink)
+                Text(category.detail)
+                    .font(.title3)
+                    .foregroundStyle(EmberColor.ink)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             if rows.isEmpty, library.problem == nil {
                 Text("Nothing in this section.")
                     .font(.subheadline)
@@ -84,10 +86,10 @@ struct VideoTabView: View {
                                 .foregroundStyle(EmberColor.ink)
                                 .multilineTextAlignment(.leading)
                             Text(video.sourceCredit)
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                            Text(clock(video.durationSeconds))
-                                .font(.subheadline)
+                                .font(.body)
+                                .foregroundStyle(EmberColor.ink)
+                            Text("\(clock(video.durationSeconds)) · \(video.category.rowNote)")
+                                .font(.body)
                                 .foregroundStyle(.secondary)
                         }
                         Spacer(minLength: 8)

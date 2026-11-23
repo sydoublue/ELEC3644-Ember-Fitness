@@ -28,6 +28,10 @@ final class VideoFeatureTests: XCTestCase {
         XCTAssertTrue(catalog.items.allSatisfy { YouTubeVideoID.isValid($0.youtubeID) })
         XCTAssertTrue(catalog.items.allSatisfy { !$0.youtubeID.contains(".") && !$0.youtubeID.contains("/") })
         XCTAssertTrue(catalog.items.allSatisfy { !$0.sourceCredit.isEmpty })
+        XCTAssertFalse(VideoCategory.followAlong.detail.isEmpty)
+        XCTAssertFalse(VideoCategory.lightShort.detail.isEmpty)
+        XCTAssertEqual(VideoCategory.followAlong.rowNote, "Technique lesson")
+        XCTAssertEqual(VideoCategory.lightShort.rowNote, "Rest between sets")
     }
 
     func testCatalogRejectsMediaPathsAndDuplicateIDs() {
