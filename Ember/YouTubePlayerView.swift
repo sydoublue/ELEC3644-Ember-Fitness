@@ -32,15 +32,11 @@ enum YouTubePlaybackProblem: Equatable {
 }
 
 enum YouTubeEmbed {
-    static func url(for youtubeID: String) -> URL? {
-        guard YouTubeVideoID.isValid(youtubeID) else { return nil }
-        var components = URLComponents(string: "https://www.youtube.com/embed/\(youtubeID)")
-        components?.queryItems = [
-            URLQueryItem(name: "playsinline", value: "1"),
-            URLQueryItem(name: "enablejsapi", value: "1"),
-            URLQueryItem(name: "rel", value: "0")
-        ]
-        return components?.url
+    /// YouTube requires a Referer that identifies the app. For HTML loaded in
+    /// WKWebView, that value comes from the page base URL, using the bundle ID.
+    static var refererURL: URL {
+        let id = (Bundle.main.bundleIdentifier ?? "hk.hku.elec3644.Ember").lowercased()
+        return URL(string: "https://\(id)") ?? URL(string: "https://hk.hku.elec3644.ember")!
     }
 }
 
@@ -52,6 +48,7 @@ enum YouTubeIFrameHTML {
         <html>
         <head>
         <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+        <meta name="referrer" content="strict-origin-when-cross-origin">
         <style>
           html, body { margin: 0; padding: 0; height: 100%; background: #000; }
           #player { position: absolute; inset: 0; }
@@ -70,7 +67,8 @@ enum YouTubeIFrameHTML {
               videoId: '\(youtubeID)',
               playerVars: {
                 playsinline: 1,
-                origin: 'https://www.youtube.com'
+                rel: 0,
+                origin: window.location.origin
               },
               events: {
                 onReady: function() {
@@ -94,7 +92,7 @@ enum YouTubeIFrameHTML {
     }
 }
 
-/// Official YouTube embed inside WKWebView.
+/// Official YouTube IFrame Player API inside WKWebView.
 /// The web view uses a non-persistent data store, so Ember does not keep YouTube media on disk.
 struct YouTubeIFramePlayer: UIViewRepresentable {
     var videoID: String
@@ -137,8 +135,8 @@ struct YouTubeIFramePlayer: UIViewRepresentable {
         webView.scrollView.backgroundColor = .black
         context.coordinator.webView = webView
         playback.webView = webView
-        if let url = YouTubeEmbed.url(for: videoID) {
-            webView.load(URLRequest(url: url))
+        if let html = YouTubeIFrameHTML.page(for: videoID) {
+            webView.loadHTMLString(html, baseURL: YouTubeEmbed.refererURL)
         } else {
             onPlaybackFailed(.unavailable)
         }
