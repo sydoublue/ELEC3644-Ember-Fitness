@@ -46,7 +46,7 @@ struct ExercisePreviewView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         .background(EmberColor.paper)
         .task(id: exerciseId) {
-            let seconds: Double = previewURL == nil ? 2.5 : 4
+            let seconds: Double = previewURL == nil ? 2.5 : 10
             try? await Task.sleep(for: .seconds(seconds))
             guard !Task.isCancelled else { return }
             finish()
@@ -83,6 +83,7 @@ struct ExercisePreviewView: View {
         player.isMuted = true
         player.volume = 0
         player.automaticallyWaitsToMinimizeStalling = false
+        player.actionAtItemEnd = .pause
         self.player = player
         player.play()
     }
