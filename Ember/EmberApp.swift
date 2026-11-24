@@ -6,7 +6,7 @@ struct EmberApp: App {
 
     var body: some Scene {
         WindowGroup {
-            HomeView()
+            RootView()
                 .environment(store)
                 .tint(EmberColor.accent)
         }
