@@ -9,6 +9,7 @@ struct SettingsView: View {
             Section("This prototype") {
                 Text("Apple Watch and HealthKit are not connected.")
                 Text("Workouts and the log stay on this phone. There is no account.")
+                Text("Form Check uses the camera during a workout. The picture stays on this phone and is not saved.")
             }
             Section {
                 Button("Reset on-device data", role: .destructive) {
