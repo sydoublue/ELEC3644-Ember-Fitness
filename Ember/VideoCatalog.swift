@@ -6,8 +6,8 @@ enum VideoCategory: String, Codable, CaseIterable, Hashable {
 
     var title: String {
         switch self {
-        case .followAlong: "Follow-along"
-        case .lightShort: "Between sets"
+        case .followAlong: "Longs"
+        case .lightShort: "Shorts"
         }
     }
 

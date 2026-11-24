@@ -15,6 +15,8 @@ final class VideoFeatureTests: XCTestCase {
         XCTAssertEqual(bench.title, "How To Get A Huge Bench Press with Perfect Technique")
         XCTAssertEqual(bench.sourceCredit, "Jeff Nippard")
         XCTAssertEqual(bench.category, .followAlong)
+        XCTAssertEqual(VideoCategory.followAlong.title, "Longs")
+        XCTAssertEqual(VideoCategory.lightShort.title, "Shorts")
         XCTAssertEqual(bench.durationSeconds, 734)
 
         let follow = catalog.items(in: .followAlong)
