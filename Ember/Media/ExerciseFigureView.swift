@@ -80,7 +80,7 @@ struct ExerciseFigureView: View {
 struct ExerciseThumb: View {
     var exercise: Exercise
     var size: CGFloat = 56
-    var animated = false
+    var animated = true
 
     var body: some View {
         let tint = Theme.color(for: exercise.category)

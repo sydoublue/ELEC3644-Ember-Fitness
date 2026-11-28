@@ -29,6 +29,9 @@ struct CatalogVideo: Codable, Equatable, Hashable, Identifiable {
     var sourceCredit: String
 
     var id: String { youtubeID }
+
+    /// Official YouTube poster image. Loaded on demand; Ember does not save it.
+    var thumbnailURL: URL? { YouTubeThumbnail.url(for: youtubeID) }
 }
 
 struct VideoCatalog: Codable, Equatable {
@@ -68,6 +71,13 @@ enum CatalogError: Error, Equatable {
     case invalidItem(String)
     case invalidYouTubeID(String)
     case duplicateYouTubeID(String)
+}
+
+enum YouTubeThumbnail {
+    static func url(for youtubeID: String) -> URL? {
+        guard YouTubeVideoID.isValid(youtubeID) else { return nil }
+        return URL(string: "https://i.ytimg.com/vi/\(youtubeID)/hqdefault.jpg")
+    }
 }
 
 enum YouTubeVideoID {

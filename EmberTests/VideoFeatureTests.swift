@@ -30,6 +30,11 @@ final class VideoFeatureTests: XCTestCase {
         XCTAssertTrue(catalog.items.allSatisfy { YouTubeVideoID.isValid($0.youtubeID) })
         XCTAssertTrue(catalog.items.allSatisfy { !$0.youtubeID.contains(".") && !$0.youtubeID.contains("/") })
         XCTAssertTrue(catalog.items.allSatisfy { !$0.sourceCredit.isEmpty })
+        let cover = try XCTUnwrap(bench.thumbnailURL)
+        XCTAssertEqual(cover.absoluteString, "https://i.ytimg.com/vi/vcBig73ojpE/hqdefault.jpg")
+        XCTAssertEqual(YouTubeThumbnail.url(for: "vcBig73ojpE")?.host, "i.ytimg.com")
+        XCTAssertNil(YouTubeThumbnail.url(for: "not-an-id"))
+        XCTAssertNil(YouTubeThumbnail.url(for: "https://youtu.be/vcBig73ojpE"))
     }
 
     func testCatalogRejectsMediaPathsAndDuplicateIDs() {

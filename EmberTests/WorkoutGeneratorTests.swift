@@ -44,11 +44,40 @@ final class WorkoutGeneratorTests: XCTestCase {
     }
 
     // Step 4 — limitations
-    func testDormHasNoJumping() {
-        for loc in [Location.dorm, .hotel] {
+    func testQuietRoomHasNoJumping() {
+        for loc in [Location.quietRoom] {
             let plan = generator.generate(SetupInput(feeling: .great, duration: 30, location: loc))
             XCTAssertFalse(plan.items.contains { $0.exercise.isJumping }, "\(loc) should not include jumping")
         }
+    }
+
+    func testGymAndHomeAllowJumping() {
+        guard let jump = ExerciseLibrary.all.first(where: { $0.isJumping }) else {
+            return XCTFail("library should include a jumping move")
+        }
+        for loc in [Location.home, .gym] {
+            let input = SetupInput(feeling: .great, duration: 30, location: loc)
+            XCTAssertNil(generator.exclusionReason(for: jump, input: input), "\(loc)")
+            XCTAssertTrue(generator.eligible(in: jump.category, input: input).contains(where: \.isJumping))
+        }
+    }
+
+    func testOutdoorsSkipsGroundLyingMoves() {
+        let plan = generator.generate(SetupInput(feeling: .great, duration: 30, location: .outdoors))
+        XCTAssertTrue(plan.items.allSatisfy { !$0.exercise.needsGroundLying })
+        XCTAssertTrue(plan.excluded.contains { $0.reason.contains("lying or kneeling") })
+        XCTAssertTrue(plan.explanation.contains { $0.contains("lie or kneel") })
+        XCTAssertTrue(ExerciseLibrary.exercise("glute-bridge")?.needsGroundLying == true)
+        XCTAssertTrue(ExerciseLibrary.exercise("push-up")?.needsGroundLying == false)
+    }
+
+    func testLegacyDormAndHotelDecodeAsQuietRoom() throws {
+        let json = #"{"feeling":3,"duration":15,"location":"dorm","discomfort":[],"disabledCategories":[],"focus":[],"preferredExercises":[]}"#
+        let input = try JSONDecoder().decode(SetupInput.self, from: Data(json.utf8))
+        XCTAssertEqual(input.location, .quietRoom)
+        let hotel = json.replacingOccurrences(of: "dorm", with: "hotel")
+        let hotelInput = try JSONDecoder().decode(SetupInput.self, from: Data(hotel.utf8))
+        XCTAssertEqual(hotelInput.location, .quietRoom)
     }
 
     func testKneeDiscomfortRemovesSquatsLungesJumps() {
@@ -85,7 +114,7 @@ final class WorkoutGeneratorTests: XCTestCase {
     }
 
     func testNoBackToBackRepeatsInLongWorkouts() {
-        let plan = generator.generate(SetupInput(feeling: .okay, duration: 30, location: .dorm, discomfort: [.knees, .wrists]))
+        let plan = generator.generate(SetupInput(feeling: .okay, duration: 30, location: .quietRoom, discomfort: [.knees, .wrists]))
         for (a, b) in zip(plan.items, plan.items.dropFirst()) {
             XCTAssertNotEqual(a.exerciseID, b.exerciseID)
         }
@@ -93,13 +122,13 @@ final class WorkoutGeneratorTests: XCTestCase {
 
     // Step 6 — determinism
     func testSameInputSamePlan() {
-        let input = SetupInput(feeling: .good, duration: 17, location: .hotel, discomfort: [.lowerBack, .shoulders])
+        let input = SetupInput(feeling: .good, duration: 17, location: .quietRoom, discomfort: [.lowerBack, .shoulders])
         XCTAssertEqual(generator.generate(input), generator.generate(input))
     }
 
     // Replace
     func testAlternativesRespectLimits() {
-        let plan = generator.generate(SetupInput(feeling: .okay, duration: 10, location: .dorm, discomfort: [.knees]))
+        let plan = generator.generate(SetupInput(feeling: .okay, duration: 10, location: .quietRoom, discomfort: [.knees]))
         guard let item = plan.mainItems.first else { return XCTFail("empty plan") }
         let alts = generator.alternatives(for: item, in: plan)
         XCTAssertTrue(alts.allSatisfy { $0.category == item.exercise.category && !$0.isJumping && !$0.stresses.contains(.knees) })
@@ -115,7 +144,7 @@ final class WorkoutGeneratorTests: XCTestCase {
 
     func testStoreRemembersSetupAndFeedback() {
         let store = EmberStore(inMemory: true)
-        store.rememberSetup(SetupInput(feeling: .good, duration: 20, location: .dorm))
+        store.rememberSetup(SetupInput(feeling: .good, duration: 20, location: .quietRoom))
         store.save(feedback: Feedback(date: Date(), rating: .tooHard, discomfort: [.knees], difficultyUsed: 4))
         let next = store.suggestedSetup()
         XCTAssertEqual(next.duration, 20)
@@ -179,7 +208,7 @@ final class CoachAndScanTests: XCTestCase {
     func testIntentParsing() {
         let i = IntentParser.parse("I have 15 minutes in my dorm, I'm tired and my knees hurt")
         XCTAssertEqual(i.minutes, 15)
-        XCTAssertEqual(i.location, .dorm)
+        XCTAssertEqual(i.location, .quietRoom)
         XCTAssertEqual(i.feeling, .low)
         XCTAssertEqual(i.discomfort, [.knees])
         XCTAssertTrue(i.wantsWorkout)
@@ -189,6 +218,12 @@ final class CoachAndScanTests: XCTestCase {
         let i = IntentParser.parse("How do I do a wall push up?")
         XCTAssertEqual(i.exerciseID, "wall-push-up")
         XCTAssertFalse(i.wantsWorkout)
+    }
+
+    func testIntentUnderstandsGymAndOutdoors() {
+        XCTAssertEqual(IntentParser.parse("20 minutes at the gym").location, .gym)
+        XCTAssertEqual(IntentParser.parse("quick session in the park").location, .outdoors)
+        XCTAssertEqual(IntentParser.parse("hotel room workout, 10 min").location, .quietRoom)
     }
 
     func testScanFindings() {

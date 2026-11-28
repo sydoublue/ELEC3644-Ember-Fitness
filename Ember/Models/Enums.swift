@@ -42,35 +42,81 @@ enum Feeling: Int, Codable, CaseIterable, Identifiable, Hashable {
     }
 }
 
-/// Where the user is exercising. Dorm / hotel exclude jumping moves.
+/// Where the user is exercising. Each place changes which moves are eligible.
 enum Location: String, Codable, CaseIterable, Identifiable, Hashable {
-    case home, dorm, hotel, outdoors
+    case quietRoom, home, gym, outdoors
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
+        case .quietRoom: return "Quiet room"
         case .home: return "Home"
-        case .dorm: return "Dorm"
-        case .hotel: return "Hotel"
+        case .gym: return "Gym"
         case .outdoors: return "Outdoors"
         }
     }
 
     var symbol: String {
         switch self {
+        case .quietRoom: return "bed.double.fill"
         case .home: return "house.fill"
-        case .dorm: return "bed.double.fill"
-        case .hotel: return "building.2.fill"
+        case .gym: return "figure.strengthtraining.traditional"
         case .outdoors: return "tree.fill"
         }
     }
 
-    /// Quiet / small spaces: no jumping.
+    /// Short caption under the selected place in Setup.
+    var detail: String {
+        switch self {
+        case .quietRoom:
+            return "Dorm, hotel, or a quiet room. No jumping, so you won't bother anyone."
+        case .home:
+            return "A living room or similar space. Jumping is fine."
+        case .gym:
+            return "A gym or fitness room. Full range of moves, including jumps."
+        case .outdoors:
+            return "A park or courtyard. Jumping is fine; we skip moves that need a clean floor."
+        }
+    }
+
+    /// Used in Coach replies, e.g. "at the gym".
+    var phrase: String {
+        switch self {
+        case .quietRoom: return "in a quiet room"
+        case .home: return "at home"
+        case .gym: return "at the gym"
+        case .outdoors: return "outdoors"
+        }
+    }
+
+    /// Quiet indoor spaces: no jumping.
     var allowsJumping: Bool {
         switch self {
-        case .dorm, .hotel: return false
-        case .home, .outdoors: return true
+        case .quietRoom: return false
+        case .home, .gym, .outdoors: return true
+        }
+    }
+
+    /// Outdoors: skip moves that need you to lie or kneel on the ground.
+    var allowsGroundLying: Bool {
+        switch self {
+        case .outdoors: return false
+        case .quietRoom, .home, .gym: return true
+        }
+    }
+
+    init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        switch raw {
+        case "quietRoom", "dorm", "hotel":
+            self = .quietRoom
+        case "gym":
+            self = .gym
+        case "outdoors":
+            self = .outdoors
+        default:
+            self = .home
         }
     }
 }

@@ -62,6 +62,17 @@ struct Exercise: Identifiable, Codable, Hashable {
         }
     }
 
+    /// Lying or kneeling moves that need a reasonably clean floor. Recovery stays allowed outdoors.
+    var needsGroundLying: Bool {
+        if isRecovery { return false }
+        switch motion {
+        case .bridge, .singleBridge, .deadBug, .birdDog, .bicycle, .crunch, .hollowHold, .superman, .catCow:
+            return true
+        default:
+            return false
+        }
+    }
+
     /// Query used to find demo videos.
     var videoQuery: String { "how to do \(name.lowercased()) proper form" }
 }

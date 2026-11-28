@@ -50,13 +50,13 @@ enum IntentParser {
         }
 
         // Location
-        if has(text, ["dorm", "roommate", "quiet", "neighbo", "downstairs", "apartment", "flat "]) {
-            intent.location = .dorm
-        } else if has(text, ["hotel", "travel", "airbnb", "trip"]) {
-            intent.location = .hotel
-        } else if has(text, ["outside", "outdoor", "park", "garden", "yard", "beach"]) {
+        if has(text, ["dorm", "roommate", "quiet", "neighbo", "downstairs", "hotel", "travel", "airbnb", "trip"]) {
+            intent.location = .quietRoom
+        } else if has(text, ["gym", "fitness room", "fitness centre", "fitness center", "weight room"]) {
+            intent.location = .gym
+        } else if has(text, ["outside", "outdoor", "park", "garden", "yard", "beach", "courtyard"]) {
             intent.location = .outdoors
-        } else if has(text, [" home", "house", "living room"]) {
+        } else if has(text, [" home", "house", "living room", "apartment", "flat "]) {
             intent.location = .home
         }
 
@@ -202,7 +202,7 @@ final class CoachAgent {
         let plan = generator.generate(input)
 
         var understood: [String] = ["\(input.duration) min", "feeling \(input.feeling.title.lowercased())"]
-        if input.location != .home { understood.append("in a \(input.location.title.lowercased())") }
+        if input.location != .home { understood.append(input.location.phrase) }
         if !input.discomfort.isEmpty {
             understood.append("easy on your " + input.discomfort.sorted().map { $0.title.lowercased() }.joined(separator: " & "))
         }
@@ -262,7 +262,7 @@ final class CoachAgent {
         if lower.contains("sleep") || lower.contains("rest day") {
             return "Rest days matter. Try a gentle 5-minute mobility session (feeling: very low) instead of skipping completely."
         }
-        return "I'm best at building workouts and explaining moves. Tell me your time, energy, place and anything that hurts, like \"10 min, tired, hotel, sore wrists\"."
+        return "I'm best at building workouts and explaining moves. Tell me your time, energy, place and anything that hurts, like \"10 min, tired, quiet room, sore wrists\"."
     }
 
     private func instructions(_ store: EmberStore) -> String {

@@ -165,10 +165,8 @@ struct SetupView: View {
                                 }
                             }
                         }
-                        if !input.location.allowsJumping {
-                            Text("No jumping moves in a \(input.location.title.lowercased()), to keep it quiet.")
-                                .font(.ember(12)).foregroundStyle(Theme.inkSoft)
-                        }
+                        Text(input.location.detail)
+                            .font(.ember(12)).foregroundStyle(Theme.inkSoft)
                     }
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Any discomfort?").font(.ember(15, .semibold)).foregroundStyle(Theme.ink)

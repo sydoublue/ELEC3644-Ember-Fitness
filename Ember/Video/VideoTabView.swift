@@ -100,33 +100,11 @@ struct VideoTabView: View {
                     Button {
                         path.append(video)
                     } label: {
-                        HStack(alignment: .center, spacing: 12) {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(video.title)
-                                    .font(.ember(16, .semibold))
-                                    .foregroundStyle(Theme.ink)
-                                    .multilineTextAlignment(.leading)
-                                Text(video.sourceCredit)
-                                    .font(.ember(14))
-                                    .foregroundStyle(Theme.inkSoft)
-                                Text(Fmt.clock(video.durationSeconds))
-                                    .font(.ember(14))
-                                    .foregroundStyle(Theme.inkSoft)
-                            }
-                            Spacer(minLength: 8)
-                            Image(systemName: "play.fill")
-                                .font(.caption.weight(.bold))
-                                .foregroundStyle(Theme.ember)
-                                .accessibilityHidden(true)
-                        }
-                        .padding(14)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.radiusSmall, style: .continuous))
-                        .overlay(RoundedRectangle(cornerRadius: Theme.radiusSmall, style: .continuous).stroke(Theme.line))
+                        VideoCoverCard(video: video)
                     }
                     .buttonStyle(.plain)
                 }
-                Text("Playback uses the official YouTube player. Videos are not downloaded, cached, or available offline. The list above still shows without a connection.")
+                Text("Covers load from YouTube when you're online. Playback uses the official player. Videos are not downloaded, cached, or available offline, and the list still shows without a connection.")
                     .font(.ember(13))
                     .foregroundStyle(Theme.inkSoft)
                     .padding(.top, 8)
@@ -225,5 +203,80 @@ struct RestDurationSheet: View {
             minutes = lounge.restMinutes
             Task { await RestNotificationAccess.requestIfNeeded() }
         }
+    }
+}
+
+
+struct VideoCoverCard: View {
+    let video: CatalogVideo
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            ZStack {
+                AsyncImage(url: video.thumbnailURL) { phase in
+                    switch phase {
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .scaledToFill()
+                    default:
+                        ZStack {
+                            Theme.ink.opacity(0.08)
+                            Image(systemName: "play.rectangle.fill")
+                                .font(.title2)
+                                .foregroundStyle(Theme.inkSoft)
+                        }
+                    }
+                }
+                .frame(maxWidth: .infinity)
+                .aspectRatio(16.0 / 9.0, contentMode: .fit)
+                .clipped()
+
+                Circle()
+                    .fill(.black.opacity(0.55))
+                    .frame(width: 44, height: 44)
+                    .overlay(
+                        Image(systemName: "play.fill")
+                            .font(.body.weight(.bold))
+                            .foregroundStyle(.white)
+                            .offset(x: 1)
+                    )
+                    .accessibilityHidden(true)
+
+                VStack {
+                    Spacer()
+                    HStack {
+                        Spacer()
+                        Text(Fmt.clock(video.durationSeconds))
+                            .font(.ember(12, .semibold))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(.black.opacity(0.62), in: Capsule())
+                            .padding(8)
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .aspectRatio(16.0 / 9.0, contentMode: .fit)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(video.title)
+                    .font(.ember(16, .semibold))
+                    .foregroundStyle(Theme.ink)
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text(video.sourceCredit)
+                    .font(.ember(14))
+                    .foregroundStyle(Theme.inkSoft)
+            }
+            .padding(14)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.radiusSmall, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: Theme.radiusSmall, style: .continuous).stroke(Theme.line))
+        .clipShape(RoundedRectangle(cornerRadius: Theme.radiusSmall, style: .continuous))
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(video.title), \(video.sourceCredit), \(Fmt.clock(video.durationSeconds))")
     }
 }

@@ -51,6 +51,9 @@ struct WorkoutGenerator {
         if exercise.isJumping && !input.location.allowsJumping {
             return "\(input.location.title): no jumping"
         }
+        if exercise.needsGroundLying && !input.location.allowsGroundLying {
+            return "\(input.location.title): no lying or kneeling on the ground"
+        }
         let hits = exercise.stresses.intersection(input.discomfort).sorted()
         if !hits.isEmpty {
             return hits.map { $0.title }.joined(separator: ", ") + " discomfort"
@@ -122,6 +125,9 @@ struct WorkoutGenerator {
         }
         if !input.location.allowsJumping && library.contains(where: { $0.isJumping }) {
             explanation.append("\(input.location.title) → no jumping moves.")
+        }
+        if !input.location.allowsGroundLying && library.contains(where: { $0.needsGroundLying }) {
+            explanation.append("\(input.location.title) → skipped moves that need you to lie or kneel on the ground.")
         }
         if !input.discomfort.isEmpty {
             explanation.append("Avoiding pressure on " + input.discomfort.sorted().map { $0.title.lowercased() }.joined(separator: ", ") + ".")

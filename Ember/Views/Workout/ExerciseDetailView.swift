@@ -16,7 +16,7 @@ struct ExerciseDetailView: View {
         let tint = Theme.color(for: ex.category)
         return ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                ExerciseFigureView(motion: ex.motion, tint: tint)
+                ExerciseFigureView(motion: ex.motion, tint: tint, animated: true)
                     .padding(24)
                     .frame(maxWidth: .infinity)
                     .frame(height: 280)
