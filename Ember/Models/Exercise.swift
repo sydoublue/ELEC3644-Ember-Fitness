@@ -48,6 +48,20 @@ struct Exercise: Identifiable, Codable, Hashable {
         self.youtubeID = youtubeID
     }
 
+    /// Strength moves are prescribed as repetitions; holds, mobility and cardio intervals stay on a timer.
+    var countsByReps: Bool {
+        if isRecovery { return false }
+        switch motion {
+        case .wallPush, .inclinePush, .kneePush, .pushUp, .declinePush, .pikePush,
+             .squat, .sitToStand, .lunge, .splitSquat, .jumpSquat, .calfRaise, .sideLegLift,
+             .bridge, .singleBridge, .goodMorning, .singleLegRDL,
+             .deadBug, .birdDog, .bicycle, .crunch, .shoulderTaps:
+            return true
+        default:
+            return false
+        }
+    }
+
     /// Query used to find demo videos.
     var videoQuery: String { "how to do \(name.lowercased()) proper form" }
 }

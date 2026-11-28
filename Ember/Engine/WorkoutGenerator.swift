@@ -19,6 +19,18 @@ struct WorkoutGenerator {
         }
     }
 
+    /// Reps for a strength move. Harder-than-energy variations get a slightly smaller set.
+    static func reps(forDifficulty difficulty: Int, exercise: Exercise) -> Int {
+        let base: Int
+        switch difficulty {
+        case ...2: base = 8
+        case 3: base = 10
+        default: base = 12
+        }
+        let harder = max(0, exercise.level - difficulty)
+        return max(6, base - harder * 2)
+    }
+
     // MARK: Step 3 — category rotation
 
     /// push → squat → hinge → core → mobility, minus disabled ones, plus any focus categories repeated at the end.
@@ -139,7 +151,8 @@ struct WorkoutGenerator {
                 items.append(PlanItem(id: items.count, exerciseID: chosen.id,
                                       workSeconds: timing.work, restSeconds: timing.rest,
                                       isRecovery: false,
-                                      reason: reason(for: chosen, category: category, difficulty: difficulty, input: input)))
+                                      reason: reason(for: chosen, category: category, difficulty: difficulty, input: input),
+                                      targetReps: chosen.countsByReps ? Self.reps(forDifficulty: difficulty, exercise: chosen) : nil))
             }
         }
 
@@ -148,6 +161,10 @@ struct WorkoutGenerator {
             items.append(PlanItem(id: items.count, exerciseID: ease.id, workSeconds: Self.slotSeconds, restSeconds: 0,
                                   isRecovery: true, reason: "Optional. A gentle way to ease your \(area.title.lowercased()). Not medical advice."))
             explanation.append("Added \(ease.name) (60s) at the end. Skip it anytime.")
+        }
+
+        if items.contains(where: { $0.isRepWork }) {
+            explanation.append("Strength moves are counted in reps; holds, mobility and cardio stay on a timer.")
         }
 
         return WorkoutPlan(input: input, items: items, explanation: explanation, excluded: excluded, notices: notices)
@@ -183,6 +200,9 @@ struct WorkoutGenerator {
         if let index = copy.items.firstIndex(where: { $0.id == item.id }) {
             copy.items[index].exerciseID = exercise.id
             copy.items[index].reason = "Swapped in by you"
+            copy.items[index].targetReps = exercise.countsByReps
+                ? Self.reps(forDifficulty: plan.input.difficulty, exercise: exercise)
+                : nil
         }
         return copy
     }

@@ -33,9 +33,17 @@ struct PlanItem: Identifiable, Codable, Hashable {
     var isRecovery: Bool
     /// Why this exercise is here (shown in the plan preview).
     var reason: String?
+    /// When set, the set is completed by repetitions rather than a work timer.
+    var targetReps: Int? = nil
 
     var exercise: Exercise { ExerciseLibrary.exercise(exerciseID) ?? ExerciseLibrary.all[0] }
     var totalSeconds: Int { workSeconds + restSeconds }
+    var isRepWork: Bool { (targetReps ?? 0) > 0 }
+
+    var workLabel: String {
+        guard let reps = targetReps else { return "\(workSeconds)s work" }
+        return exercise.perSide ? "\(reps) each side" : "\(reps) reps"
+    }
 }
 
 /// The output of `WorkoutGenerator` (proposal §2.2).
@@ -83,6 +91,7 @@ struct SessionItemResult: Codable, Hashable {
     var status: ItemStatus
     var activeSeconds: Int
     var isRecovery: Bool
+    var completedReps: Int? = nil
 }
 
 /// What actually happened during a workout (proposal §2.3, §4).

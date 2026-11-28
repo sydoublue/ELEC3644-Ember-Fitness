@@ -122,6 +122,56 @@ final class WorkoutGeneratorTests: XCTestCase {
         XCTAssertEqual(next.feeling, .okay)
         XCTAssertEqual(next.discomfort, [.knees])
     }
+
+    func testStrengthMovesUseRepsAndHoldsStayTimed() {
+        XCTAssertEqual(ExerciseLibrary.exercise("push-up")?.countsByReps, true)
+        XCTAssertEqual(ExerciseLibrary.exercise("bodyweight-squat")?.countsByReps, true)
+        XCTAssertEqual(ExerciseLibrary.exercise("glute-bridge")?.countsByReps, true)
+        XCTAssertEqual(ExerciseLibrary.exercise("forearm-plank")?.countsByReps, false)
+        XCTAssertEqual(ExerciseLibrary.exercise("wall-sit")?.countsByReps, false)
+        XCTAssertEqual(ExerciseLibrary.exercise("jumping-jacks")?.countsByReps, false)
+        XCTAssertEqual(ExerciseLibrary.exercise("knee-ease")?.countsByReps, false)
+    }
+
+    func testRepPrescriptionScalesWithDifficultyAndKeepsSixtySecondSlots() {
+        let easyPush = ExerciseLibrary.exercise("wall-push-up")!
+        let hardPush = ExerciseLibrary.exercise("decline-push-up")!
+        XCTAssertEqual(WorkoutGenerator.reps(forDifficulty: 2, exercise: easyPush), 8)
+        XCTAssertEqual(WorkoutGenerator.reps(forDifficulty: 5, exercise: easyPush), 12)
+        XCTAssertGreaterThanOrEqual(WorkoutGenerator.reps(forDifficulty: 2, exercise: hardPush), 6)
+        XCTAssertLessThan(WorkoutGenerator.reps(forDifficulty: 2, exercise: hardPush), 8)
+
+        let plan = generator.generate(SetupInput(feeling: .okay, duration: 10))
+        XCTAssertTrue(plan.items.allSatisfy { $0.totalSeconds == 60 })
+        let repItems = plan.items.filter(\.isRepWork)
+        XCTAssertFalse(repItems.isEmpty)
+        XCTAssertTrue(repItems.allSatisfy { ($0.targetReps ?? 0) >= 6 })
+        XCTAssertTrue(plan.items.filter { !$0.exercise.countsByReps }.allSatisfy { $0.targetReps == nil })
+        XCTAssertTrue(plan.explanation.contains { $0.contains("reps") })
+    }
+
+    func testReplacingUpdatesRepTargets() {
+        let plan = generator.generate(SetupInput(feeling: .okay, duration: 10))
+        guard let item = plan.mainItems.first(where: { $0.exercise.category == .push }) else {
+            return XCTFail("expected a push slot")
+        }
+        guard let plank = ExerciseLibrary.exercise("forearm-plank") else {
+            return XCTFail("missing forearm-plank")
+        }
+        let timed = generator.replacing(item, with: plank, in: plan)
+        let swapped = timed.items.first { $0.id == item.id }
+        XCTAssertEqual(swapped?.exerciseID, "forearm-plank")
+        XCTAssertNil(swapped?.targetReps)
+        XCTAssertEqual(swapped?.totalSeconds, 60)
+
+        guard let push = ExerciseLibrary.exercise("push-up") else {
+            return XCTFail("missing push-up")
+        }
+        let counted = generator.replacing(timed.items.first { $0.id == item.id }!, with: push, in: timed)
+        let restored = counted.items.first { $0.id == item.id }
+        XCTAssertEqual(restored?.exerciseID, "push-up")
+        XCTAssertEqual(restored?.targetReps, WorkoutGenerator.reps(forDifficulty: plan.input.difficulty, exercise: push))
+    }
 }
 
 final class CoachAndScanTests: XCTestCase {
@@ -163,5 +213,50 @@ final class CoachAndScanTests: XCTestCase {
         for cat in MovementCategory.allCases {
             XCTAssertFalse(ExerciseLibrary.regular(in: cat).isEmpty)
         }
+    }
+}
+
+@MainActor
+final class SessionPlayerTests: XCTestCase {
+
+    func testRepWorkIgnoresTheTimerAndFinishesOnTheLastRep() {
+        let plan = WorkoutGenerator().generate(SetupInput(feeling: .okay, duration: 5))
+        guard let first = plan.items.first, first.isRepWork, first.restSeconds > 0 else {
+            return XCTFail("expected a counted first exercise with rest")
+        }
+        let player = SessionPlayer(plan: plan)
+        player.skipExercise()
+        XCTAssertEqual(player.phase, .work)
+        XCTAssertTrue(player.isRepWork)
+        XCTAssertEqual(player.loggedReps, 0)
+        let remaining = player.remaining
+        player.tick()
+        XCTAssertEqual(player.phase, .work)
+        XCTAssertEqual(player.remaining, remaining)
+        XCTAssertEqual(player.loggedReps, 0)
+
+        for _ in 1..<player.targetReps {
+            player.logRep()
+        }
+        XCTAssertEqual(player.phase, .work)
+        XCTAssertEqual(player.loggedReps, player.targetReps - 1)
+        player.logRep()
+        XCTAssertEqual(player.phase, .rest)
+        XCTAssertEqual(player.results.first?.status, .completed)
+        XCTAssertEqual(player.results.first?.completedReps, first.targetReps)
+    }
+
+    func testFinishingASetEarlyRecordsTheRepsLogged() {
+        let plan = WorkoutGenerator().generate(SetupInput(feeling: .okay, duration: 5))
+        guard plan.items.first?.isRepWork == true else {
+            return XCTFail("expected a counted first exercise")
+        }
+        let player = SessionPlayer(plan: plan)
+        player.skipExercise()
+        player.logRep()
+        player.logRep()
+        player.completeCurrentExercise()
+        XCTAssertEqual(player.results.first?.status, .completed)
+        XCTAssertEqual(player.results.first?.completedReps, 2)
     }
 }

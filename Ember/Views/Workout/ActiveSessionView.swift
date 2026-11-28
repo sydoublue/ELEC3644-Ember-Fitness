@@ -63,6 +63,7 @@ struct ActiveSessionView: View {
     @State private var confirmEnd = false
     @State private var howTo: Exercise?
     @State private var wasPausedBeforeHowTo = false
+    @State private var showFormCheck = false
 
     private var displayItem: PlanItem? {
         switch player.phase {
@@ -83,7 +84,9 @@ struct ActiveSessionView: View {
     private var phaseLabel: String {
         switch player.phase {
         case .getReady: return "GET READY"
-        case .work: return player.current?.isRecovery == true ? "RECOVERY · OPTIONAL" : "WORK"
+        case .work:
+            if player.current?.isRecovery == true { return "RECOVERY · OPTIONAL" }
+            return player.isRepWork ? "REPS" : "WORK"
         case .rest: return "REST"
         case .finished: return "DONE"
         }
@@ -94,7 +97,11 @@ struct ActiveSessionView: View {
             topBar
             ScrollView {
                 VStack(spacing: 18) {
-                    figure
+                    if showFormCheck, player.phase == .work, let item = player.current {
+                        FormCheckPanel(exerciseId: item.exerciseID)
+                    } else {
+                        figure
+                    }
                     titleBlock
                     timer
                     nextUp
@@ -119,6 +126,9 @@ struct ActiveSessionView: View {
             Button("Keep going", role: .cancel) {}
         } message: {
             Text("Anything you haven't done will be logged as skipped.")
+        }
+        .onChange(of: player.phase) { _, phase in
+            if phase != .work { showFormCheck = false }
         }
         .sheet(item: $howTo, onDismiss: {
             if !wasPausedBeforeHowTo && player.isPaused { player.togglePause() }
@@ -187,16 +197,30 @@ struct ActiveSessionView: View {
                     .frame(maxWidth: .infinity)
                     .background(Theme.surface.opacity(0.7), in: RoundedRectangle(cornerRadius: 30, style: .continuous))
                     .overlay(alignment: .topTrailing) {
-                        Button {
-                            wasPausedBeforeHowTo = player.isPaused
-                            if !player.isPaused { player.togglePause() }
-                            howTo = item.exercise
-                        } label: {
-                            Label("How to", systemImage: "play.rectangle.fill")
-                                .font(.ember(13, .semibold))
-                                .padding(.horizontal, 10).padding(.vertical, 6)
-                                .background(Theme.surface, in: Capsule())
-                                .overlay(Capsule().stroke(Theme.line))
+                        VStack(alignment: .trailing, spacing: 8) {
+                            Button {
+                                wasPausedBeforeHowTo = player.isPaused
+                                if !player.isPaused { player.togglePause() }
+                                howTo = item.exercise
+                            } label: {
+                                Label("How to", systemImage: "play.rectangle.fill")
+                                    .font(.ember(13, .semibold))
+                                    .padding(.horizontal, 10).padding(.vertical, 6)
+                                    .background(Theme.surface, in: Capsule())
+                                    .overlay(Capsule().stroke(Theme.line))
+                            }
+                            if player.phase == .work {
+                                Button {
+                                    showFormCheck.toggle()
+                                } label: {
+                                    Label(showFormCheck ? "Demo" : "Form Check",
+                                          systemImage: showFormCheck ? "figure.cooldown" : "camera.viewfinder")
+                                        .font(.ember(13, .semibold))
+                                        .padding(.horizontal, 10).padding(.vertical, 6)
+                                        .background(Theme.surface, in: Capsule())
+                                        .overlay(Capsule().stroke(Theme.line))
+                                }
+                            }
                         }
                         .foregroundStyle(Theme.ink)
                         .padding(12)
@@ -227,15 +251,26 @@ struct ActiveSessionView: View {
 
     private var timer: some View {
         ZStack {
-            RingProgress(progress: 1 - player.phaseProgress, lineWidth: 14,
+            RingProgress(progress: player.isRepWork ? player.phaseProgress : 1 - player.phaseProgress, lineWidth: 14,
                          tint: AnyShapeStyle(phaseTint))
             VStack(spacing: 2) {
-                Text(Fmt.clock(player.remainingWholeSeconds))
-                    .font(.system(size: 56, weight: .bold, design: .rounded))
-                    .monospacedDigit()
-                    .foregroundStyle(Theme.ink)
-                    .contentTransition(.numericText(countsDown: true))
-                    .animation(.default, value: player.remainingWholeSeconds)
+                if player.isRepWork {
+                    Text("\(player.loggedReps)/\(player.targetReps)")
+                        .font(.system(size: 52, weight: .bold, design: .rounded))
+                        .monospacedDigit()
+                        .foregroundStyle(Theme.ink)
+                        .contentTransition(.numericText())
+                        .animation(.default, value: player.loggedReps)
+                    Text(player.current?.exercise.perSide == true ? "each side" : "reps")
+                        .font(.ember(14, .semibold)).foregroundStyle(Theme.inkSoft)
+                } else {
+                    Text(Fmt.clock(player.remainingWholeSeconds))
+                        .font(.system(size: 56, weight: .bold, design: .rounded))
+                        .monospacedDigit()
+                        .foregroundStyle(Theme.ink)
+                        .contentTransition(.numericText(countsDown: true))
+                        .animation(.default, value: player.remainingWholeSeconds)
+                }
                 if player.isPaused {
                     Text("Paused").font(.ember(14, .semibold)).foregroundStyle(Theme.warn)
                 }
@@ -243,7 +278,9 @@ struct ActiveSessionView: View {
         }
         .frame(width: 190, height: 190)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(player.remainingWholeSeconds) seconds left")
+        .accessibilityLabel(player.isRepWork
+                            ? "\(player.loggedReps) of \(player.targetReps) reps"
+                            : "\(player.remainingWholeSeconds) seconds left")
     }
 
     @ViewBuilder private var nextUp: some View {
@@ -276,6 +313,12 @@ struct ActiveSessionView: View {
                 Button { player.skipExercise() } label: { Text("I'm ready, go") }
                     .buttonStyle(.emberPrimary)
             case .work:
+                if player.isRepWork {
+                    Button { player.logRep() } label: { Text("Log a rep") }
+                        .buttonStyle(.emberPrimary)
+                    Button { player.completeCurrentExercise() } label: { Text("Done with this set") }
+                        .buttonStyle(.emberSecondary)
+                }
                 Button { player.skipExercise() } label: {
                     Label(player.current?.isRecovery == true ? "Skip recovery" : "Skip exercise", systemImage: "forward.fill")
                 }

@@ -16,7 +16,7 @@ struct EmberApp: App {
 }
 
 enum AppTab: Hashable {
-    case today, scan, coach, activity
+    case today, scan, coach, video, activity
 }
 
 enum HomeRoute: Hashable {
@@ -64,9 +64,13 @@ final class AppRouter {
 struct RootView: View {
     @Environment(EmberStore.self) private var store
     @Environment(AppRouter.self) private var router
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var lounge = VideoLounge()
+    @State private var showRestSheet = false
 
     var body: some View {
         @Bindable var router = router
+        @Bindable var lounge = lounge
         Group {
             if store.settings.hasOnboarded {
                 TabView(selection: $router.tab) {
@@ -91,9 +95,36 @@ struct RootView: View {
                         .tabItem { Label("Coach", systemImage: "sparkles") }
                         .tag(AppTab.coach)
 
+                    VideoTabView(showRestSheet: $showRestSheet)
+                        .tabItem { Label("Video", systemImage: "play.rectangle.fill") }
+                        .tag(AppTab.video)
+
                     LogView()
                         .tabItem { Label("Activity", systemImage: "list.bullet.rectangle.portrait") }
                         .tag(AppTab.activity)
+                }
+                .environment(lounge)
+                .onChange(of: router.tab) { _, newTab in
+                    if newTab == .video {
+                        showRestSheet = true
+                    }
+                }
+                .onReceive(Timer.publish(every: 1, on: .main, in: .common).autoconnect()) { date in
+                    lounge.tick(now: date)
+                }
+                .onChange(of: scenePhase) { _, phase in
+                    if phase == .active { lounge.tick() }
+                }
+                .onChange(of: lounge.showRestAlert) { _, show in
+                    if show { showRestSheet = false }
+                }
+                .sheet(isPresented: $showRestSheet) {
+                    RestDurationSheet(lounge: lounge)
+                }
+                .alert("Rest is over", isPresented: $lounge.showRestAlert) {
+                    Button("Next set") {}
+                } message: {
+                    Text("Time to start your next set. Playback is paused.")
                 }
                 .fullScreenCover(item: $router.activeWorkout) { workout in
                     WorkoutFlowView(plan: workout.plan)

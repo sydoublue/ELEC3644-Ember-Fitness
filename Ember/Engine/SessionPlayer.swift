@@ -2,6 +2,7 @@ import Foundation
 import Observation
 
 /// Plays a `WorkoutPlan` one exercise at a time with work / rest timers (proposal §2.3).
+/// Strength moves can be completed by repetitions instead of the work timer.
 /// Records completed and skipped items plus rest adjustments into a `Session`.
 @Observable
 final class SessionPlayer {
@@ -34,12 +35,14 @@ final class SessionPlayer {
     private(set) var skippedBreaks = 0
     private(set) var extendedBreaks = 0
     private(set) var endedAt: Date?
+    private(set) var loggedReps = 0
 
     @ObservationIgnored var onEvent: ((Event) -> Void)?
     @ObservationIgnored private var timer: Timer?
     @ObservationIgnored private var phaseEnd = Date()
     @ObservationIgnored private var lastCountdown = Int.max
     @ObservationIgnored private var announcedHalfway = false
+    @ObservationIgnored private var workStartedAt: Date?
 
     init(plan: WorkoutPlan) {
         self.plan = plan
@@ -59,7 +62,14 @@ final class SessionPlayer {
         return plan.items.indices.contains(i) ? plan.items[i] : nil
     }
 
+    var isRepWork: Bool { phase == .work && (current?.targetReps ?? 0) > 0 }
+    var targetReps: Int { current?.targetReps ?? 0 }
+
     var phaseProgress: Double {
+        if isRepWork {
+            guard targetReps > 0 else { return 0 }
+            return min(1, max(0, Double(loggedReps) / Double(targetReps)))
+        }
         guard phaseDuration > 0 else { return 1 }
         return min(1, max(0, 1 - remaining / phaseDuration))
     }
@@ -90,7 +100,9 @@ final class SessionPlayer {
             phaseEnd = Date().addingTimeInterval(remaining)
             isPaused = false
         } else {
-            remaining = max(0, phaseEnd.timeIntervalSinceNow)
+            if !isRepWork {
+                remaining = max(0, phaseEnd.timeIntervalSinceNow)
+            }
             isPaused = true
         }
     }
@@ -106,6 +118,22 @@ final class SessionPlayer {
         case .rest, .finished:
             break
         }
+    }
+
+    /// Log one repetition during a count-based set.
+    func logRep() {
+        guard phase == .work, let target = current?.targetReps, target > 0 else { return }
+        loggedReps = min(target, loggedReps + 1)
+        if loggedReps >= target {
+            completeCurrentExercise()
+        }
+    }
+
+    /// Finish the current work interval, including a rep set early.
+    func completeCurrentExercise() {
+        guard phase == .work else { return }
+        recordCurrent(status: .completed)
+        afterWork()
     }
 
     /// "I'm good, skip the break."
@@ -150,8 +178,9 @@ final class SessionPlayer {
 
     // MARK: Engine
 
-    private func tick() {
+    func tick() {
         guard !isPaused, phase != .finished else { return }
+        if isRepWork { return }
         remaining = max(0, phaseEnd.timeIntervalSinceNow)
 
         let whole = Int(remaining.rounded(.up))
@@ -202,18 +231,29 @@ final class SessionPlayer {
         phase = newPhase
         phaseDuration = duration
         remaining = duration
-        phaseEnd = Date().addingTimeInterval(duration)
+        phaseEnd = Date().addingTimeInterval(max(0, duration))
         lastCountdown = Int.max
         announcedHalfway = false
+        loggedReps = 0
+        workStartedAt = newPhase == .work ? Date() : nil
         if isPaused { isPaused = false }
         onEvent?(.phaseChanged(newPhase))
     }
 
     private func recordCurrent(status: ItemStatus) {
         guard let item = current, results.count == index else { return }
-        let active = status == .completed ? item.workSeconds : Int(max(0, phaseDuration - remaining))
+        let elapsed: Int
+        if let start = workStartedAt {
+            elapsed = max(0, Int(Date().timeIntervalSince(start).rounded()))
+        } else if status == .completed {
+            elapsed = item.workSeconds
+        } else {
+            elapsed = Int(max(0, phaseDuration - remaining))
+        }
+        let reps = item.isRepWork ? (status == .completed ? (loggedReps > 0 ? loggedReps : item.targetReps) : loggedReps) : nil
         results.append(SessionItemResult(exerciseID: item.exerciseID, status: status,
-                                         activeSeconds: active, isRecovery: item.isRecovery))
+                                         activeSeconds: elapsed, isRecovery: item.isRecovery,
+                                         completedReps: reps))
     }
 
     private func finish() {

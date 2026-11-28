@@ -213,7 +213,11 @@ final class CoachAgent {
         if plan.items.isEmpty {
             text += "I couldn't fit any moves with those limits. Try fewer discomfort areas."
         } else {
-            text += "Here's \(plan.mainItems.count) moves at \(plan.workSecondsPerItem)s on / \(plan.restSecondsPerItem)s off"
+            if plan.mainItems.contains(where: { $0.isRepWork }) {
+                text += "Here's \(plan.mainItems.count) moves, with strength work in reps and \(plan.restSecondsPerItem)s rests"
+            } else {
+                text += "Here's \(plan.mainItems.count) moves at \(plan.workSecondsPerItem)s on / \(plan.restSecondsPerItem)s off"
+            }
             text += plan.recoveryItem != nil ? ", finishing with a gentle \(plan.recoveryItem!.exercise.name.lowercased())." : "."
         }
         return ChatMessage(role: .coach, text: text, plan: plan)

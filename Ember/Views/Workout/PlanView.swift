@@ -49,7 +49,13 @@ struct PlanView: View {
             HStack(spacing: 10) {
                 pill(Fmt.clock(plan.totalSeconds), "clock.fill")
                 pill("\(plan.mainItems.count) moves", "square.stack.3d.up.fill")
-                pill("\(plan.workSecondsPerItem)s / \(plan.restSecondsPerItem)s", "timer")
+                if plan.mainItems.contains(where: { $0.isRepWork }) && plan.mainItems.contains(where: { !$0.isRepWork }) {
+                    pill("Reps + intervals", "timer")
+                } else if !plan.mainItems.isEmpty && plan.mainItems.allSatisfy({ $0.isRepWork }) {
+                    pill("Reps / \(plan.restSecondsPerItem)s rest", "number")
+                } else {
+                    pill("\(plan.workSecondsPerItem)s / \(plan.restSecondsPerItem)s", "timer")
+                }
             }
             // Category ribbon
             GeometryReader { geo in
@@ -192,7 +198,7 @@ struct PlanItemRow: View {
                         }
                         Text(item.reason ?? ex.category.title)
                             .font(.ember(13)).foregroundStyle(Theme.inkSoft).lineLimit(1)
-                        Text(item.isRecovery ? "\(item.workSeconds)s" : "\(item.workSeconds)s work · \(item.restSeconds)s rest")
+                        Text(item.isRecovery ? "\(item.workSeconds)s" : "\(item.workLabel) · \(item.restSeconds)s rest")
                             .font(.ember(12, .medium)).foregroundStyle(Theme.color(for: ex.category))
                     }
                     Spacer(minLength: 0)
