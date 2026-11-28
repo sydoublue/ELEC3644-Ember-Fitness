@@ -191,7 +191,7 @@ struct ActiveSessionView: View {
     private var figure: some View {
         Group {
             if let item = displayItem {
-                ExerciseFigureView(motion: item.exercise.motion, tint: phaseTint, animated: player.phase == .work && !player.isPaused)
+                ExerciseFigureView(motion: item.exercise.motion, tint: phaseTint, animated: !player.isPaused)
                     .padding(18)
                     .frame(height: 230)
                     .frame(maxWidth: .infinity)
